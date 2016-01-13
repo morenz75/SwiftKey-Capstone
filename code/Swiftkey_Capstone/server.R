@@ -1,4 +1,5 @@
 library(shiny)
+library(stringr)
 load("final.Rdata")
 
 predict <- function(sentence) {
