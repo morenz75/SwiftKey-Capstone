@@ -1,0 +1,268 @@
+---
+title: "DSC - SwiftKey Capstone"
+author: "Moreno Riccardi"
+date: "Tuesday, December 22, 2015"
+output:
+  html_document:
+    fig_height: 10
+    fig_width: 12
+---
+
+```{r warning=FALSE, echo=FALSE, message=FALSE, results='hide'}
+require("tm")
+require("slam")
+require("RWeka")
+require("stringr")
+require("knitr")
+require("wordcloud")
+```
+
+# Introduction
+
+Our purpose is to build a predictive text model, that can help people who are spending an increasing amount of time on their mobile devices for email, social networking, banking and a whole range of other activities. But typing on mobile devices can be a serious pain. So, as SwiftKey does on their smart keyboard, I'll build a Shiny application that implement predictive text models. When someone types:
+
+I went to the
+
+the application will present three options for what the next word might be. For example, the three words might be gym, store, restaurant. 
+
+
+## Our approach
+
+I'll use NLP models, based on Markov chain and Turing Smoothing Algorithm (Gale And Simpson), to predict the next word only from the preceding N-1 words.
+For example if I choose n=3 (tri-gram) and I type "Wow, I like to play...", the probability of the next word being "rugby" it's dependent only on the two preceding words:
+"to" and "play".
+
+# Data
+
+First of all I've downloaded training data from this URL:
+https://d396qusza40orc.cloudfront.net/dsscapstone/dataset/Coursera-SwiftKey.zip
+
+and then I've imported all the lines in different vectors:
+
+```{r loaddata, cache=TRUE, warning=FALSE, echo=TRUE, message=FALSE, results='hide', eval=FALSE}
+con <- file("../data/en_US/en_US.blogs.txt", "r", blocking = FALSE)
+blogs <- readLines(con = con, encoding = "UTF-8", skipNul = TRUE)
+close(con)
+
+con <- file("../data/en_US/en_US.news.txt", "r", blocking = FALSE)
+news <- readLines(con = con, encoding = "UTF-8", skipNul = TRUE)
+close(con)
+
+con <- file("../data/en_US/en_US.twitter.txt", "r", blocking = FALSE)
+twitter <- readLines(con = con, encoding = "ASCI", skipNul = TRUE)
+close(con)
+
+file_summary <- data.frame(
+    c("Lines", "Approx. Words"),
+    blogs = c(format(length(blogs), big.mark=","), format(sum(sapply(gregexpr("\\W+", blogs), length) + 1 ), big.mark=",")),
+    news = c(format(length(news), big.mark=","), format(sum(sapply(gregexpr("\\W+", news), length) + 1 ), big.mark=",")),
+    twitter = c(format(length(twitter), big.mark=","), format(sum(sapply(gregexpr("\\W+", twitter), length) + 1 ), big.mark=",")),
+    row.names = 1
+    )
+```
+
+```{r filesum, cache=TRUE, warning=FALSE, echo=FALSE, message=FALSE, results='hide'}
+file_summary <- data.frame(
+    c("Lines", "Approx. Words"),
+    blogs = c(format(899288, big.mark=","), format(39121566, big.mark=",")),
+    news = c(format(1010242, big.mark=","), format(36721104, big.mark=",")),
+    twitter = c(format(2360148, big.mark=","), format(32874052, big.mark=",")),
+    row.names = 1
+    )
+```
+
+```{r filesummaryv, cache=TRUE, warning=FALSE, echo=FALSE, message=FALSE}
+kable(file_summary)
+```
+
+# Preprocessing
+
+I've decided to train the model using 
+
+* first 150.000 blogs,
+* first 200.000 news,
+* first 400.000 twitter
+
+so there's should be approximatively the same number of word from each file.
+
+Next I've trasformed some word (as listed below), before generating the Corpus (through tm package)
+
+```{r train, cache=TRUE, warning=FALSE, echo=FALSE, message=FALSE, results='hide', eval = FALSE}
+train <- c(blogs[1:150000], news[1:200000], twitter[1:400000])
+
+train <- gsub("don't", "do not", train, ignore.case = TRUE)
+train <- gsub("doesn't", "does not", train, ignore.case = TRUE)
+train <- gsub("can't", "cannot", train, ignore.case = TRUE)
+train <- gsub("I'll", "I will", train, ignore.case = TRUE)
+train <- gsub("won't", "will not", train, ignore.case = TRUE)
+train <- gsub("didn't", "did not", train, ignore.case = TRUE)
+train <- gsub("e's", "e is", train, ignore.case = TRUE)
+train <- gsub("isn't", "is not", train, ignore.case = TRUE)
+train <- gsub("i'm", "i am", train, ignore.case = TRUE)
+train <- gsub("it's", "it is", train, ignore.case = TRUE)
+
+vectorS <- VectorSource(train)
+corpusT <- Corpus(vectorS)
+```
+
+The last step (see Appendix for source code) was to create N-gram model using tm and weka package. Since I found some problems cleaning words from unwanted character, I've created a custom function (myTokenizer) to clean words, before creating N-grams model:
+
+* unigram
+* bigram
+* trigram
+
+# Exploration
+
+```{r loadrdata, cache=TRUE, warning=FALSE, echo=FALSE, message=FALSE, results='hide'}
+load("../data/train.Rdata")
+```
+
+## Unigrams
+
+```{r unigrams, cache=TRUE, warning=FALSE, echo=FALSE, message=FALSE}
+summary(unigram_freq)
+```
+
+## Bigrams
+
+```{r bigrams, cache=TRUE, warning=FALSE, echo=FALSE, message=FALSE}
+summary(bigram_freq)
+```
+
+## Trigrams
+
+```{r trigrams, cache=TRUE, warning=FALSE, echo=FALSE, message=FALSE}
+summary(trigram_freq)
+```
+
+## Most frequent N-grams
+
+Let's take a look at which are the most common words and N-grams (with their frequencies)
+
+
+```{r explorationgraph, cache=TRUE, warning=FALSE, echo=FALSE, message=FALSE}
+par(mfrow = c(1,3))
+barplot(head(unigram_freq/sum(unigram_freq), 20), horiz = TRUE, las=1)
+barplot(head(bigram_freq/sum(bigram_freq), 20), horiz = TRUE, las=1)
+barplot(head(trigram_freq/sum(trigram_freq), 20), horiz = TRUE, las=1)
+par(mfrow = c(1,1))
+```
+
+```{r wordcloud, cache=TRUE, warning=FALSE, echo=FALSE, message=FALSE}
+par(mfrow=c(1,3))
+
+wordcloud(names(unigram_freq),
+          unigram_freq,
+          min.freq=10000,
+          scale=c(5,.5),
+          rot.per=0.3,
+          colors=brewer.pal(8, "Dark2"),
+          random.order=FALSE,
+          random.color=TRUE)
+
+wordcloud(names(bigram_freq),
+          bigram_freq,
+          min.freq=4000,
+          scale=c(5,.5),
+          rot.per=0.3,
+          colors=brewer.pal(8, "Dark2"),
+          random.order=FALSE,
+          random.color=TRUE)
+
+wordcloud(names(trigram_freq),
+          trigram_freq,
+          min.freq=800,
+          scale=c(5,.5),
+          rot.per=0.3,
+          colors=brewer.pal(8, "Dark2"),
+          random.order=FALSE,
+          random.color=TRUE)
+par(mfrow = c(1,1))
+```
+
+# Next Steps
+
+* Reduce and improve predictive model, evaluating accuracy and efficiency.
+* Create a shiny app to show off predictive algorithm.
+
+# Appendix
+
+```{r appendix, cache=TRUE, warning=FALSE, echo=TRUE, message=FALSE, eval = FALSE}
+require("tm")
+require("slam")
+require("RWeka")
+require("stringr")
+require("wordcloud")
+
+myTokenizer <- function (x) {
+    ret <- x$content
+    ret <- unlist(strsplit(ret, " "))
+    ret <- gsub("[^a-zA-zèòàùèéùì]|\\[|\\]|\\\\|_|\\^|-|`", "", ret)
+    return(ret[which(ret != "")])
+}
+
+unigramTokenizer <- function(x) {
+    return(myTokenizer(x))
+}
+
+biGramTokenizer <- function(x) {
+    return(NGramTokenizer(paste(myTokenizer(x), collapse = " "), Weka_control(min = 2, max = 2)))
+}
+
+triGramTokenizer <- function(x) {
+    return(NGramTokenizer(paste(myTokenizer(x), collapse = " "), Weka_control(min = 3, max = 3)))
+}
+
+tdm_unigram <- TermDocumentMatrix(
+    corpusT,
+    control = list(
+        tokenize = myTokenizer,
+        weight = weightTf,
+        tolower=TRUE,
+        removeNumbers = FALSE,
+        wordLengths = c(1, Inf),
+        removePunctuation = FALSE,
+        stopwords = FALSE
+    ))
+
+unigram_freq <- row_sums(tdm_unigram, na.rm = TRUE)
+unigram_freq <- sort(unigram_freq, decreasing=TRUE)
+
+tdm_bigram <- TermDocumentMatrix(
+    corpusT, 
+    control = list(tokenize = biGramTokenizer,
+                   weight = weightTf,
+                   tolower=TRUE,
+                   removeNumbers = FALSE,
+                   wordLengths = c(1, Inf),
+                   removePunctuation = FALSE,
+                   stopwords = FALSE,
+                   tolower = TRUE
+    ))
+
+bigram_freq <- row_sums(tdm_bigram, na.rm = TRUE)
+bigram_freq <- sort(bigram_freq, decreasing=TRUE)
+
+tdm_trigram <- TermDocumentMatrix(
+    corpusT, 
+    control = list(tokenize = triGramTokenizer,
+                   weight = weightTf,
+                   tolower=TRUE,
+                   removeNumbers = FALSE,
+                   wordLengths = c(1, Inf),
+                   removePunctuation = FALSE,
+                   stopwords = FALSE,
+                   tolower = TRUE
+    ))
+
+trigram_freq <- row_sums(tdm_trigram, na.rm = TRUE)
+trigram_freq <- sort(trigram_freq, decreasing=TRUE)
+
+```
+
+# References
+
+* http://citeseerx.ist.psu.edu/viewdoc/summary?doi=10.1.1.110.8518
+* http://web.mit.edu/6.863/www/fall2012/readings/ngrampages.pdf
+* https://class.coursera.org/nlp/lecture/129
+
