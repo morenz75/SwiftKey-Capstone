@@ -2,29 +2,45 @@ DSC - Swiftkey Slide deck
 ========================================================
 author: Moreno Riccardi
 
-
-First Slide
+Motivation
 ========================================================
 
-Check completo 0.1378751
+Build a prediction model that given a chink of text, predict the next word.
 
-For more details on authoring R presentations click the
-**Help** button on the toolbar.
+Moreover we had to make a simple app, with these contraints:
 
-- Bullet 1
-- Bullet 2
-- Bullet 3
+* accurate, in term of the prediction
+* fast, with low response
+* efficient, low resources usage.
 
-Slide With Code
+R code here: https://github.com/morenz75/SwiftKey-Capstone
+
+
+Model Selection
 ========================================================
 
-```{r}
-summary(cars)
-```
+I have created my model from 750.000 phrases (as explained [here](http://rpubs.com/morenz75/138837)), that produced ~ 15 million elements (unigrams, bigrams and trigrams) for ~ 1 GigaBytes of memory.
 
-Slide With Plot
+Next I've cut off elements with single occurence, and merged bigrams with the three trigrams elements with more occurences (so we'll have a data.frame with 2 column: bigrams, and topnextword, i.e. of the|year,day,most). Same for unigrams.
+
+Doing so I have
+
+* improved efficency, memory used to ~ 40MB, 
+* improved accuracy (from 13.8% to 14.7% on a 2500 random phrases not included in the training set)
+* improved prediction response, from more than a minute to 0,14 second (for a single prediction)
+
+
+Algorithm
 ========================================================
 
-```{r, echo=FALSE}
-plot(cars)
-```
+* Get a phrase in input
+* if the last two words appears in the bigram data.frame, print out the last words prediction
+* else che the last word in the unigrams data.frame, print out last words prediction
+* if no n-grams found in the previous steps, i've decided to print out the top frequency words (the, to, and)
+
+App Instructions
+========================================================
+
+* Go to Shinyapp: https://morenz.shinyapps.io/Swiftkey_Capstone/
+* fill in your phrase and click "Predict next word" button, 
+* check the predicted words below.

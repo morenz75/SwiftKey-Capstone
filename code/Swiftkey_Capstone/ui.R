@@ -17,6 +17,7 @@ shinyUI(fluidPage(
             br(),
             actionButton("action", label = "Predict next word"),
             br(),br(),
+            h4("Predicted word:"),
             conditionalPanel(
                 condition = "input.action != 0",
                 htmlOutput("predictWord")

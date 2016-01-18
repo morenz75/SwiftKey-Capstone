@@ -49,7 +49,7 @@ test <- gsub("it's", "it is", test, ignore.case = TRUE)
 
 res <- vector(mode="logical")
 
-sapply(test, predictTest, USE.NAMES = FALSE)
+res <- sapply(test, predictTest, USE.NAMES = FALSE)
 
 save(df_u, df_b, file = "../../data/final.Rdata")
 
